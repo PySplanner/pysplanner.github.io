@@ -4,9 +4,8 @@ import { Metadata } from 'next';
 import '@/styles/globals.css';
 
 export const metadata: Metadata = {
-    title: "Cloverbots 48816",
-    description: "Cloverbots 48816 website",
-    icons: ["favicon.ico"],
+    title: "Pysplanner | Dashboard",
+    description: "Dashboard for PySplanner"
 }
 
 function MyApp({ Component, pageProps }: AppProps) {

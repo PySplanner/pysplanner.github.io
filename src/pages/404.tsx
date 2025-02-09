@@ -1,5 +1,4 @@
 import React from 'react';
-import { Card } from "@/components/ui/card";
 import { useRouter } from 'next/router';
 
 export default function NotFound() {
