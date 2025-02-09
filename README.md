@@ -1,2 +1,2 @@
-# Cloverbots FLL Website
-This is the GitHub Pages repository for The Cloverbots 48816 Site
+# Pysplanner Dashboard
+This repository holds files for the PySplanner dashboard hosted at https://pysplanner.github.io/
