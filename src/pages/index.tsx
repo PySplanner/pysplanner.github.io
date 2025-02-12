@@ -9,7 +9,7 @@ export default function App() {
   const { theme } = useTheme()
   const mat_img = `./game_board_${theme}.png`
   const [settings_active, SetSettingsActive] = useState(false)
-  
+
   const Sidebar = () => {
     return (
       <Card className="w-72 min-w-72 flex flex-col">
@@ -44,15 +44,8 @@ export default function App() {
   const Home = () => {
     return (
       <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
-        {/* Wrapper div that centers the image and PointPlotter */}
         <div className="relative">
-          {/* Image */}
-          <img
-            src={mat_img}
-            className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"
-          />
-  
-          {/* Overlay PointPlotter on top of the image */}
+          <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"/>
           <div className="absolute inset-0 flex items-center justify-center">
             <PointPlotter />
           </div>
@@ -60,8 +53,6 @@ export default function App() {
       </div>
     );
   };
-  
-  
 
   const Settings = () => {
     return (
