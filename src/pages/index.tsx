@@ -3,6 +3,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useTheme } from "next-themes";
+import PointPlotter from "@/components/spline_plotter";
 
 export default function App() {
   const { theme } = useTheme()
@@ -11,7 +12,7 @@ export default function App() {
   
   const Sidebar = () => {
     return (
-      <Card className="w-72 flex flex-col">
+      <Card className="w-72 min-w-72 flex flex-col">
         <div className="pt-4 pb-2 flex flex-col">
           <div className="flex rounded-lg hover:bg-zinc-800 mb-3 py-1 w-[calc(100%-30px)] ml-[15px]" onClick={ () => SetSettingsActive(false) }>
             <img src="./PySplanner.png" className="h-14 w-14 rounded-lg" />
@@ -42,11 +43,25 @@ export default function App() {
 
   const Home = () => {
     return (
-      <div className="flex w-full items-center justify-center border rounded-lg ml-4">
-        <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain" />
+      <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
+        {/* Wrapper div that centers the image and PointPlotter */}
+        <div className="relative">
+          {/* Image */}
+          <img
+            src={mat_img}
+            className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"
+          />
+  
+          {/* Overlay PointPlotter on top of the image */}
+          <div className="absolute inset-0 flex items-center justify-center">
+            <PointPlotter />
+          </div>
+        </div>
       </div>
-    )
-  }
+    );
+  };
+  
+  
 
   const Settings = () => {
     return (
