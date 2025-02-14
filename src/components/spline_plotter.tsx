@@ -1,113 +1,87 @@
-import React, { useState, useEffect, useRef } from "react";
-
-const computeSpline = (points: { x: number; y: number }[]) => {
-  if (points.length < 2) return points;
-  
-  const n = points.length;
-  const xs = points.map(p => p.x);
-  const ys = points.map(p => p.y);
-  
-  let a = [...ys];
-  let b = Array(n - 1).fill(0);
-  let d = Array(n - 1).fill(0);
-  let h = Array(n - 1).fill(0);
-  let alpha = Array(n - 1).fill(0);
-  
-  for (let i = 0; i < n - 1; i++) {
-    h[i] = xs[i + 1] - xs[i];
-  }
-  
-  let c = Array(n).fill(0);
-  let l = Array(n).fill(1);
-  let mu = Array(n).fill(0);
-  let z = Array(n).fill(0);
-  
-  for (let i = 1; i < n - 1; i++) {
-    alpha[i] = (3 / h[i]) * (a[i + 1] - a[i]) - (3 / h[i - 1]) * (a[i] - a[i - 1]);
-  }
-  
-  for (let i = 1; i < n - 1; i++) {
-    l[i] = 2 * (xs[i + 1] - xs[i - 1]) - h[i - 1] * mu[i - 1];
-    mu[i] = h[i] / l[i];
-    z[i] = (alpha[i] - h[i - 1] * z[i - 1]) / l[i];
-  }
-  
-  for (let j = n - 2; j >= 0; j--) {
-    c[j] = z[j] - mu[j] * c[j + 1];
-    b[j] = (a[j + 1] - a[j]) / h[j] - (h[j] * (c[j + 1] + 2 * c[j])) / 3;
-    d[j] = (c[j + 1] - c[j]) / (3 * h[j]);
-  }
-  
-  let interpolatedPoints = [];
-  for (let i = 0; i < n - 1; i++) {
-    for (let x = xs[i]; x <= xs[i + 1]; x += 5) {
-      let dx = x - xs[i];
-      let y = a[i] + b[i] * dx + c[i] * dx ** 2 + d[i] * dx ** 3;
-      interpolatedPoints.push({ x, y });
-    }
-  }
-  return interpolatedPoints;
-};
+import React, { useState, useEffect } from "react";
 
 type Point = { x: number; y: number };
 
+const getCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
+  let _pts = pts.slice(0);
+  let res = [], x, y, t1x, t2x, t1y, t2y, c1, c2, c3, c4, st, t;
+
+  if (isClosed) {
+    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]);
+    _pts.push(pts[0], pts[1]);
+  } else {
+    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]); // Add mirrored point at start
+    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]); // Add mirrored point at end
+  }
+
+  for (let i = 2; i < (_pts.length - 4); i += 2) {
+    for (t = 0; t <= numOfSegments; t++) {
+      t1x = (_pts[i + 2] - _pts[i - 2]) * tension;
+      t2x = (_pts[i + 4] - _pts[i]) * tension;
+      t1y = (_pts[i + 3] - _pts[i - 1]) * tension;
+      t2y = (_pts[i + 5] - _pts[i + 1]) * tension;
+      st = t / numOfSegments;
+      c1 = 2 * st ** 3 - 3 * st ** 2 + 1;
+      c2 = -2 * st ** 3 + 3 * st ** 2;
+      c3 = st ** 3 - 2 * st ** 2 + st;
+      c4 = st ** 3 - st ** 2;
+      x = c1 * _pts[i] + c2 * _pts[i + 2] + c3 * t1x + c4 * t2x;
+      y = c1 * _pts[i + 1] + c2 * _pts[i + 3] + c3 * t1y + c4 * t2y;
+      res.push({ x, y });
+    }
+  }
+  return res;
+};
+
+
 export default function PointPlotter() {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const [points, setPoints] = useState<Point[]>([]);
-  const [splinePoints, setSplinePoints] = useState<Point[]>([]);
-  const [selectedPoint, setSelectedPoint] = useState<number | null>(null);
-  const [isDrawing, setIsDrawing] = useState(false);
-  
-  useEffect(() => {
-    draw();
-  }, [points, splinePoints]);
+  const [history, setHistory] = useState<Point[][]>([[]]);
+  const [currentIndex, setCurrentIndex] = useState(0);
 
-  const draw = () => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  const addPoint = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const newPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const newPoints = [...points, newPoint];
+    setPoints(newPoints);
+    setHistory(history.slice(0, currentIndex + 1).concat([newPoints]));
+    setCurrentIndex(currentIndex + 1);
+  };
 
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw points
-    ctx.fillStyle = 'green';
-    points.forEach(({ x, y }) => {
-      ctx.beginPath();
-      ctx.arc(x, y, 5, 0, Math.PI * 2);
-      ctx.fill();
-    });
-
-    // Draw spline
-    if (splinePoints.length > 1) {
-      ctx.strokeStyle = 'green';
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(splinePoints[0].x, splinePoints[0].y);
-      splinePoints.forEach(({ x, y }) => ctx.lineTo(x, y));
-      ctx.stroke();
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.key === 'z' && currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+      setPoints(history[currentIndex - 1]);
+    } else if (e.ctrlKey && e.key === 'y' && currentIndex < history.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setPoints(history[currentIndex + 1]);
     }
   };
 
-  const addPoint = (e: React.MouseEvent) => {
-    const rect = canvasRef.current?.getBoundingClientRect();
-    if (!rect) return;
-    const newPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    setPoints([...points, newPoint]);
-    updateSpline([...points, newPoint]);
-  };
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [points, history, currentIndex]);
 
-  const updateSpline = (newPoints: Point[]) => {
-    if (newPoints.length < 2) return;
-    const interpolated = computeSpline(newPoints);
-    setSplinePoints(interpolated);
-  };
+  const flatPoints = points.flatMap(p => [p.x, p.y]);
+  const splinePoints = getCurvePoints(flatPoints);
 
   return (
-    <canvas
-    ref={canvasRef}
-    className="flex w-full h-full border border-gray-300"
-    onClick={addPoint}
-    />
+    <div className="w-full h-full relative" onClick={addPoint}>
+      {points.map((p, idx) => (
+        <div
+          key={idx}
+          className="absolute bg-green-500 w-2 h-2 rounded-full"
+          style={{ left: `${p.x}px`, top: `${p.y}px` }}
+        />
+      ))}
+      {splinePoints.map((p, idx) => (
+        <div
+          key={idx}
+          className="absolute bg-green-400 w-1 h-1 rounded-full"
+          style={{ left: `${p.x}px`, top: `${p.y}px` }}
+        />
+      ))}
+    </div>
   );
 }

@@ -7,7 +7,7 @@ import PointPlotter from "@/components/spline_plotter";
 
 export default function App() {
   const { theme } = useTheme()
-  const mat_img = `./game_board_${theme}.png`
+  const mat_img = `./game_board_${theme ? theme : "dark"}.png`
   const [settings_active, SetSettingsActive] = useState(false)
 
   const Sidebar = () => {
