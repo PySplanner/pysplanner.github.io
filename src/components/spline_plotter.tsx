@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import  { toast } from "sonner";
 
 type Point = { x: number; y: number };
 
@@ -53,6 +54,14 @@ export default function PointPlotter() {
     const rect = e.currentTarget.getBoundingClientRect();
     const newPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     const newPoints = [...points, newPoint];
+
+    if (newPoints.length === 25) {
+      toast.warning("WARNING: Exceeding 25 points may cause lagging/crashing of the Spike or EV3 robot.", {duration: 10000});
+    } else if (newPoints.length === 50) {
+      toast.error("You have reached the maximum number of points, which is 50.", {duration: 10000});
+      return
+    }
+
     setPoints(newPoints);
     setHistory(history.slice(0, currentIndex + 1).concat([newPoints]));
     setCurrentIndex(currentIndex + 1);

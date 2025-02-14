@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button"
 import { useState } from "react"
 import { useTheme } from "next-themes";
 import PointPlotter from "@/components/spline_plotter";
+import { Toaster } from "sonner";
 
 export default function App() {
   const { theme } = useTheme()
@@ -67,6 +68,7 @@ export default function App() {
 
   return (
     <div className="flex flex-row w-screen h-screen p-4">
+      <Toaster richColors position="bottom-right" theme="dark" />
       <Sidebar />
       {settings_active ? <Settings /> : <Home />}
     </div>
