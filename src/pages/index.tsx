@@ -54,7 +54,7 @@ export default function App() {
         <div className="flex flex-col mb-4">
           <div className="flex flex-col gap-2 w-[calc(100%-30px)] ml-[15px]">
             <Accordion type="single" collapsible className="w-full mb-2">
-              <AccordionItem value="item-1">
+              <AccordionItem value="Spike">
                 <AccordionTrigger>Spike</AccordionTrigger>
                 <AccordionContent>
                   <div className="flex flex-col gap-2">
@@ -63,13 +63,13 @@ export default function App() {
                   </div>
                 </AccordionContent>
               </AccordionItem>
-              <AccordionItem value="item-2">
+              <AccordionItem value="EV3">
                 <AccordionTrigger>EV3</AccordionTrigger>
                 <AccordionContent>
                   EV3 is not yet supported.
                 </AccordionContent>
               </AccordionItem>
-              <AccordionItem value="item-3">
+              <AccordionItem value="Paths">
                 <AccordionTrigger>Paths</AccordionTrigger>
                 <AccordionContent>
                   <div className="flex flex-col gap-2">
