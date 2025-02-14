@@ -5,6 +5,14 @@ import { useState } from "react"
 import { useTheme } from "next-themes";
 import PointPlotter from "@/components/spline_plotter";
 import { Toaster } from "sonner";
+import { connectToSpike } from "@/components/pybricks/tools";
+
+const sample_code = `
+from pybricks.pupdevices import Motor
+from pybricks.parameters import Port
+motor = Motor(Port.A)
+motor.run_time(100, 2000)
+`
 
 export default function App() {
   const { theme } = useTheme()
@@ -34,7 +42,7 @@ export default function App() {
             <Button variant="secondary" className="w-full">Create Path</Button>
             <Button variant="secondary" className="w-full">Load Paths</Button>
             <Button variant="secondary" className="w-full">Save Paths</Button>
-            <Button variant="secondary" className="w-full">Generate Code</Button>
+            <Button variant="secondary" className="w-full" onClick = { () => connectToSpike() }>Run Code</Button>
             <Button variant="secondary" className="w-full" onClick={ () => SetSettingsActive(true) }>Settings</Button>
           </div>
         </div>
