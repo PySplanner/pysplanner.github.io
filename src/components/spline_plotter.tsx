@@ -2,35 +2,45 @@ import React, { useState, useEffect } from "react";
 
 type Point = { x: number; y: number };
 
+// Function to generate curve points from given points using Catmull-Rom splines
 const getCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
-  let _pts = pts.slice(0);
+  let _pts = pts.slice(0); // Copy the array of points
   let res = [], x, y, t1x, t2x, t1y, t2y, c1, c2, c3, c4, st, t;
 
+  // Handle closed vs open curves by adding control points at the ends
   if (isClosed) {
-    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]);
-    _pts.push(pts[0], pts[1]);
+    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]); // Repeat last point at the start
+    _pts.push(pts[0], pts[1]); // Repeat first point at the end
   } else {
-    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]); // Add mirrored point at start
-    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]); // Add mirrored point at end
+    // Add mirrored control points at start and end to prevent sharp edges
+    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]); 
+    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]); 
   }
 
+  // Loop through each segment of the points
   for (let i = 2; i < (_pts.length - 4); i += 2) {
-    for (t = 0; t <= numOfSegments; t++) {
+    for (t = 0; t <= numOfSegments; t++) { // Interpolate points for each segment
+      // Calculate tangents at the start and end of the segment
       t1x = (_pts[i + 2] - _pts[i - 2]) * tension;
       t2x = (_pts[i + 4] - _pts[i]) * tension;
       t1y = (_pts[i + 3] - _pts[i - 1]) * tension;
       t2y = (_pts[i + 5] - _pts[i + 1]) * tension;
-      st = t / numOfSegments;
+      st = t / numOfSegments; // Parameter for interpolation between 0 and 1
+      
+      // Catmull-Rom spline basis functions
       c1 = 2 * st ** 3 - 3 * st ** 2 + 1;
       c2 = -2 * st ** 3 + 3 * st ** 2;
       c3 = st ** 3 - 2 * st ** 2 + st;
       c4 = st ** 3 - st ** 2;
+
+      // Calculate the x and y coordinates using the basis functions
       x = c1 * _pts[i] + c2 * _pts[i + 2] + c3 * t1x + c4 * t2x;
       y = c1 * _pts[i + 1] + c2 * _pts[i + 3] + c3 * t1y + c4 * t2y;
-      res.push({ x, y });
+      
+      res.push({ x, y }); // Store the interpolated point
     }
   }
-  return res;
+  return res; // Return the array of curve points
 };
 
 
@@ -69,18 +79,10 @@ export default function PointPlotter() {
   return (
     <div className="w-full h-full relative" onClick={addPoint}>
       {points.map((p, idx) => (
-        <div
-          key={idx}
-          className="absolute bg-green-500 w-2 h-2 rounded-full"
-          style={{ left: `${p.x}px`, top: `${p.y}px` }}
-        />
+        <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
       ))}
       {splinePoints.map((p, idx) => (
-        <div
-          key={idx}
-          className="absolute bg-green-400 w-1 h-1 rounded-full"
-          style={{ left: `${p.x}px`, top: `${p.y}px` }}
-        />
+        <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
       ))}
     </div>
   );
