@@ -21,6 +21,78 @@ motor = Motor(Port.A)
 motor.run_time(100, 2000)
 `
 
+class DriveBase {
+  left_motor: "A" | "B" | "C" | "D";
+  right_motor: "A" | "B" | "C" | "D";
+  wheel_diameter: number;
+  axle_track: number;
+
+  constructor(left_motor: "A" | "B" | "C" | "D", right_motor: "A" | "B" | "C" | "D", wheel_diameter: number, axle_track: number) {
+    if (left_motor === right_motor) {
+      throw new Error("Left and right motors must be different");
+    }
+    
+    this.left_motor = left_motor;
+    this.right_motor = right_motor;
+    this.wheel_diameter = wheel_diameter;
+    this.axle_track = axle_track;
+  }
+}
+
+class Action {
+  function: string;
+  args: any[];
+
+  constructor(function_name: string, args: any[] = []) {
+    this.function = function_name;
+    this.args = args;
+  }
+}
+
+class Point {
+  x: number;
+  y: number;
+  actions: Action[];
+  actions_are_blocking: boolean
+
+  constructor(x: number, y: number, actions: Action[] = [], actions_are_blocking: boolean = false) {
+    this.x = x;
+    this.y = y;
+    this.actions = actions;
+    this.actions_are_blocking = actions_are_blocking;
+  }
+}
+
+class PySplanContent {
+  name: string;
+  drive_base: DriveBase;
+  runs: Point[][];
+
+  constructor(data: any) {
+    this.name = data.name;
+    this.drive_base = new DriveBase(data.drive_base.left_motor, data.drive_base.right_motor, data.drive_base.wheel_diameter, data.drive_base.axle_track);
+    this.runs = data.runs;
+  }
+
+  save_file() {
+    const data = JSON.stringify(this);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = "py_splan.json";
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  async generate_code() {
+    const github_url = "https://raw.githubusercontent.com/PySplanner/PySplanner/refs/heads/main/pysplanner.py"
+    const response = await fetch(github_url);
+    const code = await response.text();
+    // TODO: Add the stuff to the code
+  }
+}
+
 export default function App() {
   const { theme } = useTheme()
   const mat_img = `./game_board_${theme ? theme : "dark"}.png`
