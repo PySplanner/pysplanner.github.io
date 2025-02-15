@@ -1,18 +1,19 @@
 /// <reference types="@types/web-bluetooth" />
+
 export async function connectToSpike(): Promise<BluetoothRemoteGATTServer | null> {
   try {
     const device = await navigator.bluetooth.requestDevice({
-      acceptAllDevices: true, // Allow selecting any BLE device
+      acceptAllDevices: true,
       optionalServices: ['battery_service', '00001623-1212-efde-1623-785feabcd123'] // PyBricks LEGO Hub Service
     });
 
     const server = await device.gatt?.connect();
     if (!server) throw new Error('Failed to connect to GATT server');
 
-    console.log('Connected to Spike PRIME');
+    console.log('Connected to Spike');
     return server;
   } catch (error) {
-    console.error('Error connecting to Spike PRIME:', error);
+    console.error('Error connecting to Spike:', error);
     return null;
   }
 }
@@ -28,7 +29,7 @@ export async function sendCodeToSpike(server: BluetoothRemoteGATTServer, code: s
   
       // Send the code
       await txCharacteristic.writeValue(commandBytes);
-      console.log('Code sent to Spike PRIME');
+      console.log('Code sent to Spike');
     } catch (error) {
       console.error('Error sending code:', error);
     }
