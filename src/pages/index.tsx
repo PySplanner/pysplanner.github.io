@@ -1,10 +1,9 @@
 /// <reference types="@types/web-bluetooth" />
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { Button } from "@/components/ui/button";
+import { useState, useEffect } from "react"
 import { useTheme } from "next-themes";
-import PointPlotter from "@/components/spline_plotter";
 import { Toaster, toast } from "sonner";
 import { connectToSpike, sendCodeToSpike, readResponseFromSpike } from "@/components/pybricks/tools";
 import {
@@ -20,6 +19,7 @@ from pybricks.parameters import Port
 motor = Motor(Port.A)
 motor.run_time(100, 2000)
 `
+const motorOptions = ["A", "B", "C", "D"]
 
 class DriveBase {
   left_motor: "A" | "B" | "C" | "D";
@@ -40,10 +40,12 @@ class DriveBase {
 }
 
 class Action {
+  point: Point;
   function: string;
   args: any[];
-
-  constructor(function_name: string, args: any[] = []) {
+  
+  constructor(point: Point, function_name: string, args: any[] = []) {
+    this.point = point;
     this.function = function_name;
     this.args = args;
   }
@@ -52,26 +54,34 @@ class Action {
 class Point {
   x: number;
   y: number;
-  actions: Action[];
-  actions_are_blocking: boolean
 
-  constructor(x: number, y: number, actions: Action[] = [], actions_are_blocking: boolean = false) {
+  constructor(x: number, y: number) {
     this.x = x;
     this.y = y;
-    this.actions = actions;
-    this.actions_are_blocking = actions_are_blocking;
   }
 }
 
-class PySplanContent {
+class Run {
+  name: string;
+  points: Point[];
+  actions: Action[];
+
+  constructor(name: string, points: Point[], actions: Action[] = []) {
+    this.name = name;
+    this.points = points;
+    this.actions = actions;
+  }
+}
+
+class SplanContent {
   name: string;
   drive_base: DriveBase;
-  runs: Point[][];
+  runs: Run[];
 
   constructor(data: any) {
     this.name = data.name;
     this.drive_base = new DriveBase(data.drive_base.left_motor, data.drive_base.right_motor, data.drive_base.wheel_diameter, data.drive_base.axle_track);
-    this.runs = data.runs;
+    this.runs = data.runs.map((run: any) => new Run(run.name, run.points, run.actions));
   }
 
   save_file() {
@@ -93,22 +103,138 @@ class PySplanContent {
   }
 }
 
+// Custom PySplanner B-Spline algorithm
+const getCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
+  let _pts = pts.slice(0); // Copy the array of points
+  let res = [], x, y, t1x, t2x, t1y, t2y, c1, c2, c3, c4, st, t;
+
+  // Handle closed vs open curves by adding control points at the ends
+  if (isClosed) {
+    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]); // Repeat last point at the start
+    _pts.push(pts[0], pts[1]); // Repeat first point at the end
+  } else {
+    // Add mirrored control points at start and end to prevent sharp edges
+    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]); 
+    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]); 
+  }
+
+  // Loop through each segment of the points
+  for (let i = 2; i < (_pts.length - 4); i += 2) {
+    for (t = 0; t <= numOfSegments; t++) { // Interpolate points for each segment
+      // Calculate tangents at the start and end of the segment
+      t1x = (_pts[i + 2] - _pts[i - 2]) * tension;
+      t2x = (_pts[i + 4] - _pts[i]) * tension;
+      t1y = (_pts[i + 3] - _pts[i - 1]) * tension;
+      t2y = (_pts[i + 5] - _pts[i + 1]) * tension;
+      st = t / numOfSegments; // Parameter for interpolation between 0 and 1
+      
+      // Catmull-Rom spline basis functions
+      c1 = 2 * st ** 3 - 3 * st ** 2 + 1;
+      c2 = -2 * st ** 3 + 3 * st ** 2;
+      c3 = st ** 3 - 2 * st ** 2 + st;
+      c4 = st ** 3 - st ** 2;
+
+      // Calculate the x and y coordinates using the basis functions
+      x = c1 * _pts[i] + c2 * _pts[i + 2] + c3 * t1x + c4 * t2x;
+      y = c1 * _pts[i + 1] + c2 * _pts[i + 3] + c3 * t1y + c4 * t2y;
+      
+      res.push({ x, y }); // Store the interpolated point
+    }
+  }
+  return res; // Return the array of curve points
+};
+
 export default function App() {
   const { theme } = useTheme()
   const mat_img = `./game_board_${theme ? theme : "dark"}.png`
   const [settings_active, SetSettingsActive] = useState(false)
   const [spike_server, SetSpikeServer] = useState<BluetoothRemoteGATTServer | null>(null)
+  const [pysplan_handloer, SetPySplanHandler] = useState<SplanContent | null>(null)
+  const [points, setPoints] = useState<Point[]>([]);
+  const [history, setHistory] = useState<Point[][]>([[]]);
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const HandleLoadSplan = () => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.pysplan';
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const data = JSON.parse(reader.result as string);
+        try { const splan = new SplanContent(data); SetPySplanHandler(splan); } catch (e) { toast.error("Failed to load Splan file, check the console for more info", {duration: 5000}); console.error(e); }
+      }
+      reader.readAsText(file);
+    }
+    input.click();
+  }
+
+  const HandleSaveSplan = () => {
+    if (!pysplan_handloer) { toast.error("No Splan to save", {duration: 5000}); return; }
+    const data = JSON.stringify(pysplan_handloer);
+    const blob = new Blob([data], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${pysplan_handloer.name}.pysplan`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+  
+  const GenerateCode = async () => {
+    const github_url = "https://raw.githubusercontent.com/PySplanner/PySplanner/refs/heads/main/pysplanner.py"
+    const response = await fetch(github_url);
+    const code = await response.text();
+    // TODO: Add the stuff to the code
+  }
+
+  const addPoint = (e: React.MouseEvent) => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const newPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
+    const newPoints = [...points, newPoint];
+
+    if (newPoints.length === 25) {
+      toast.warning("WARNING: Exceeding 25 points may cause lagging/crashing of the Spike or EV3 robot.", {duration: 10000});
+    } else if (newPoints.length === 50) {
+      toast.error("You have reached the maximum number of points, which is 50.", {duration: 10000});
+      return
+    }
+
+    setPoints(newPoints);
+    setHistory(history.slice(0, currentIndex + 1).concat([newPoints]));
+    setCurrentIndex(currentIndex + 1);
+  };
+
+  const handleKeyDown = (e: KeyboardEvent) => {
+    if (e.ctrlKey && e.key === 'z' && currentIndex > 0) {
+      setCurrentIndex(currentIndex - 1);
+      setPoints(history[currentIndex - 1]);
+    } else if (e.ctrlKey && e.key === 'y' && currentIndex < history.length - 1) {
+      setCurrentIndex(currentIndex + 1);
+      setPoints(history[currentIndex + 1]);
+    }
+  };
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [points, history, currentIndex]);
+
+  const flatPoints = points.flatMap(p => [p.x, p.y]);
+  const splinePoints = getCurvePoints(flatPoints);
 
   const GetSpikeServer = async () => {
     toast.promise(
-        async () => { SetSpikeServer(await connectToSpike()) },
-        {
-            loading: "Connecting to Spike...",
-            success: "Connected to Spike!",
-            error: "Failed to connect to Spike."
-        }
+      async () => { SetSpikeServer(await connectToSpike()) },
+      {
+          loading: "Connecting to Spike...",
+          success: "Connected to Spike!",
+          error: "Failed to connect to Spike."
+      }
     )
-};
+  };
 
   const Sidebar = () => {
     return (
@@ -141,13 +267,13 @@ export default function App() {
                   EV3 is not yet supported.
                 </AccordionContent>
               </AccordionItem>
-              <AccordionItem value="Paths">
-                <AccordionTrigger>Paths</AccordionTrigger>
+              <AccordionItem value="Splans">
+                <AccordionTrigger>Splans</AccordionTrigger>
                 <AccordionContent>
                   <div className="flex flex-col gap-2">
-                    <Button variant="secondary" className="w-full">Create Path</Button>
-                    <Button variant="secondary" className="w-full">Load Paths</Button>
-                    <Button variant="secondary" className="w-full">Save Paths</Button>
+                    <Button variant="secondary" className="w-full">Create Splan</Button>
+                    <Button variant="secondary" className="w-full" onClick={ () => HandleLoadSplan() }>Load Splan</Button>
+                    <Button variant="secondary" className="w-full" onClick={ () => HandleSaveSplan() }>Save Splan</Button>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -166,20 +292,36 @@ export default function App() {
 
   const Home = () => {
     return (
-      <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
-        <div className="relative">
-          <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"/>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <PointPlotter />
+      <div className="flex items-center justify-center w-full h-full">
+        {pysplan_handloer ? (
+          <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
+            <div className="relative">
+              <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"/>
+              <div className="absolute inset-0 flex items-center justify-center">
+                <div className="w-full h-full relative" onClick={addPoint}>
+                  {points.map((p, idx) => (
+                    <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
+                  ))}
+                  {splinePoints.map((p, idx) => (
+                    <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col items-center justify-center w-full h-full border rounded-lg ml-4">
+            <p className="text-center font-bold text-xl">Create a new Splan or load an existing one on the sidebar under Splans</p>
+            <p className="text-center mt-2 text-md text-zinc-500">This path planner is currently in development, please check back later</p>
+          </div>
+        )}
       </div>
     );
   };
 
   const Settings = () => {
     return (
-      <div className="relative flex w-full  border rounded-lg ml-4 p-8">
+      <div className="relative flex w-full border rounded-lg ml-4 p-8">
         <h1>Settings</h1>
         <Button variant={"secondary"} className="absolute top-2 right-2 m-2" onClick={ () => SetSettingsActive(false)}>
           ✕
