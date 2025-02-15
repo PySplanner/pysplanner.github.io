@@ -59,6 +59,10 @@ class Point {
     this.x = x;
     this.y = y;
   }
+
+  toJSON() { // Save point as [x, y] instead of {x: x, y: y}
+    return [this.x, this.y];
+  }
 }
 
 class Run {
@@ -66,10 +70,10 @@ class Run {
   points: Point[];
   actions: Action[];
 
-  constructor(name: string, points: Point[], actions: Action[] = []) {
+  constructor(name: string, points: [number, number][], actions: { point: [number, number], function: string, args: any[] }[] = []) {
     this.name = name;
-    this.points = points;
-    this.actions = actions;
+    this.points = points.map((point) => new Point(point[0], point[1]));
+    this.actions = actions.map((action) => new Action(new Point(action.point[0], action.point[1]), action.function, action.args));
   }
 }
 
@@ -83,28 +87,10 @@ class SplanContent {
     this.drive_base = new DriveBase(data.drive_base.left_motor, data.drive_base.right_motor, data.drive_base.wheel_diameter, data.drive_base.axle_track);
     this.runs = data.runs.map((run: any) => new Run(run.name, run.points, run.actions));
   }
-
-  save_file() {
-    const data = JSON.stringify(this);
-    const blob = new Blob([data], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = "py_splan.json";
-    link.click();
-    URL.revokeObjectURL(url);
-  }
-
-  async generate_code() {
-    const github_url = "https://raw.githubusercontent.com/PySplanner/PySplanner/refs/heads/main/pysplanner.py"
-    const response = await fetch(github_url);
-    const code = await response.text();
-    // TODO: Add the stuff to the code
-  }
 }
 
 // Custom PySplanner B-Spline algorithm
-const getCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
+const GetCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
   let _pts = pts.slice(0); // Copy the array of points
   let res = [], x, y, t1x, t2x, t1y, t2y, c1, c2, c3, c4, st, t;
 
@@ -149,10 +135,8 @@ export default function App() {
   const mat_img = `./game_board_${theme ? theme : "dark"}.png`
   const [settings_active, SetSettingsActive] = useState(false)
   const [spike_server, SetSpikeServer] = useState<BluetoothRemoteGATTServer | null>(null)
-  const [pysplan_handloer, SetPySplanHandler] = useState<SplanContent | null>(null)
-  const [points, setPoints] = useState<Point[]>([]);
-  const [history, setHistory] = useState<Point[][]>([[]]);
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [pysplan_handler, SetPySplanHandler] = useState<SplanContent | null>(null)
+  const [run_index, SetRunIndex] = useState(0)
 
   const HandleLoadSplan = () => {
     const input = document.createElement('input');
@@ -164,7 +148,10 @@ export default function App() {
       const reader = new FileReader();
       reader.onload = async () => {
         const data = JSON.parse(reader.result as string);
-        try { const splan = new SplanContent(data); SetPySplanHandler(splan); } catch (e) { toast.error("Failed to load Splan file, check the console for more info", {duration: 5000}); console.error(e); }
+        try { 
+          const splan = new SplanContent(data)
+          SetPySplanHandler(splan);
+        } catch (e) { toast.error("Failed to load Splan file, check the console for more info", {duration: 5000}); console.error(e); }
       }
       reader.readAsText(file);
     }
@@ -172,13 +159,13 @@ export default function App() {
   }
 
   const HandleSaveSplan = () => {
-    if (!pysplan_handloer) { toast.error("No Splan to save", {duration: 5000}); return; }
-    const data = JSON.stringify(pysplan_handloer);
+    if (!pysplan_handler) { toast.error("No Splan to save", {duration: 5000}); return; }
+    const data = JSON.stringify(pysplan_handler);
     const blob = new Blob([data], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
-    link.download = `${pysplan_handloer.name}.pysplan`;
+    link.download = `${pysplan_handler.name}.pysplan`;
     link.click();
     URL.revokeObjectURL(url);
   }
@@ -190,40 +177,25 @@ export default function App() {
     // TODO: Add the stuff to the code
   }
 
-  const addPoint = (e: React.MouseEvent) => {
+  const AddPoint = (e: React.MouseEvent) => {
+    if (!pysplan_handler) { toast.error("No run selected", {duration: 5000}); return; }
     const rect = e.currentTarget.getBoundingClientRect();
-    const newPoint = { x: e.clientX - rect.left, y: e.clientY - rect.top };
-    const newPoints = [...points, newPoint];
+    const new_point = new Point(e.clientX - rect.left, e.clientY - rect.top);
+    const new_points = [...pysplan_handler.runs[run_index].points, new_point];
 
-    if (newPoints.length === 25) {
+    if (new_points.length === 25) {
       toast.warning("WARNING: Exceeding 25 points may cause lagging/crashing of the Spike or EV3 robot.", {duration: 10000});
-    } else if (newPoints.length === 50) {
+    } else if (new_points.length === 50) {
       toast.error("You have reached the maximum number of points, which is 50.", {duration: 10000});
       return
     }
 
-    setPoints(newPoints);
-    setHistory(history.slice(0, currentIndex + 1).concat([newPoints]));
-    setCurrentIndex(currentIndex + 1);
+    pysplan_handler.runs[run_index].points = new_points;
+    SetPySplanHandler(pysplan_handler);
   };
 
-  const handleKeyDown = (e: KeyboardEvent) => {
-    if (e.ctrlKey && e.key === 'z' && currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1);
-      setPoints(history[currentIndex - 1]);
-    } else if (e.ctrlKey && e.key === 'y' && currentIndex < history.length - 1) {
-      setCurrentIndex(currentIndex + 1);
-      setPoints(history[currentIndex + 1]);
-    }
-  };
-
-  useEffect(() => {
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [points, history, currentIndex]);
-
-  const flatPoints = points.flatMap(p => [p.x, p.y]);
-  const splinePoints = getCurvePoints(flatPoints);
+  const flat_points = pysplan_handler?.runs[run_index].points.flatMap(p => [p.x, p.y])
+  const spline_points = GetCurvePoints(flat_points ?? []);
 
   const GetSpikeServer = async () => {
     toast.promise(
@@ -280,11 +252,25 @@ export default function App() {
             </Accordion>
             <Button variant="secondary" className="w-full" onClick={ () => SetSettingsActive(true) }>Settings</Button>
           </div>
-          <Separator orientation="horizontal" className="bg-zinc-600 w-[calc(100%-30px)] ml-[15px] my-4" />
+          <Separator orientation="horizontal" className="bg-zinc-600 w-[calc(100%-30px)] ml-[15px] mt-4" />
         </div>
         <div className="flex flex-col flex-grow overflow-y-auto">
-          <p className="text-center mt-4 w-[calc(100%-30px)] ml-[15px] font-bold text-lg">Under Construction</p>
-          <p className="text-center mt-1 w-[calc(100%-30px)] ml-[15px] text-sm text-zinc-500">This path planner is currently being developed</p>
+          {pysplan_handler ? (
+            <div className="flex flex-col gap-2 w-[calc(100%-30px)] ml-[15px]">
+              {pysplan_handler.runs.map((run, idx) => (
+                <Button key={idx} variant={run_index === idx ? "secondary" : "outline"} className="w-full" onClick={() => SetRunIndex(idx)}>{run.name}</Button>
+              ))}
+            </div>
+          ) : (
+            <div>
+              <p className="text-center mt-4 w-[calc(100%-30px)] ml-[15px] font-bold text-lg">
+                Under Construction
+              </p>
+              <p className="text-center mt-1 w-[calc(100%-30px)] ml-[15px] text-sm text-zinc-500">
+                This path planner is currently being developed
+              </p>
+            </div>
+          )}
         </div>
       </Card>
     );
@@ -293,16 +279,16 @@ export default function App() {
   const Home = () => {
     return (
       <div className="flex items-center justify-center w-full h-full">
-        {pysplan_handloer ? (
+        {pysplan_handler ? (
           <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
             <div className="relative">
               <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"/>
               <div className="absolute inset-0 flex items-center justify-center">
-                <div className="w-full h-full relative" onClick={addPoint}>
-                  {points.map((p, idx) => (
+                <div className="w-full h-full relative" onClick={AddPoint}>
+                  {pysplan_handler.runs[run_index].points.map((p, idx) => (
                     <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
                   ))}
-                  {splinePoints.map((p, idx) => (
+                  {spline_points.map((p, idx) => (
                     <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
                   ))}
                 </div>
