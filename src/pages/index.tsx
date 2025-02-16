@@ -18,7 +18,6 @@ from pybricks.parameters import Port
 motor = Motor(Port.A)
 motor.run_time(100, 2000)
 `
-const motor_options = ["A", "B", "C", "D"]
 const game_board_width = 2362.2 // mm
 const game_board_height = 1143.0 // mm
 
@@ -148,14 +147,32 @@ export default function App() {
   const [run_creator_open, SetRunCreatorOpen] = useState(false)
   const [splan_creator_open, SetSplanCreatorOpen] = useState(false)
 
-  useEffect(() => {
+  function UpdateImgDimensions () {
     if (img_size_ref.current) {
       // @ts-ignore | Fix getBoundingClient due to initial 'null' value
       const { width, height } = img_size_ref.current.getBoundingClientRect();
       SetImageDimensions({ width, height });
       console.log(img_dimensions.width, img_dimensions.height);
     }
+  }
+
+  useEffect(() => {
+    UpdateImgDimensions();
   }, [pysplan_handler]);
+
+  function RunMM(run: Run) {
+    if (img_dimensions.width === 0 || img_dimensions.height === 0) UpdateImgDimensions();
+
+    const convertedPoints = run.points.map((point) => {
+      return new Point((point.x / img_dimensions.width) * game_board_width, (point.y / img_dimensions.height) * game_board_height);
+    });
+
+    const convertedActions = run.actions.map((action) => {
+      return new Action(new Point((action.point.x / img_dimensions.width) * game_board_width, (action.point.y / img_dimensions.height) * game_board_height), action.function, action.args);
+    });
+
+    return new Run(run.name, convertedPoints, convertedActions);
+  }
 
   const HandleLoadSplan = () => {
     const input = document.createElement('input');
@@ -331,8 +348,12 @@ export default function App() {
     const github_url = "https://raw.githubusercontent.com/PySplanner/PySplanner/refs/heads/main/pysplanner.py"
     const response = await fetch(github_url);
     let code = await response.text();
-
+    
+    pysplan_handler.runs.forEach((run) => {
+      return RunMM(run);
+    })
     pysplan_handler.hub_type = hub;
+
     code = code.replace(`"{INSERT_PATH_PLANNER_DATA}"`, JSON.stringify(pysplan_handler));
 
     const blob = new Blob([code], { type: "text/plain" });
