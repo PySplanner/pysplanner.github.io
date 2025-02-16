@@ -80,11 +80,13 @@ class Run {
 
 class SplanContent {
   name: string;
+  hub_type: "Spike" | "EV3" | null;
   drive_base: DriveBase;
   runs: Run[];
 
   constructor(data: any) {
     this.name = data.name;
+    this.hub_type = null
     this.drive_base = new DriveBase(data.drive_base.left_motor, data.drive_base.right_motor, data.drive_base.wheel_diameter, data.drive_base.axle_track);
     this.runs = data.runs.map((run: any) => new Run(run.name, run.points.map((point: any) => new Point(point[0], point[1])), run.actions.map((action: any) => new Action(new Point(action.point[0], action.point[1]), action.function, action.args))));
   }
@@ -323,11 +325,23 @@ export default function App() {
     )
   }
 
-  const GenerateCode = async () => {
+  const GenerateCode = async (hub: "EV3" | "Spike") => {
+    if (!pysplan_handler) { toast.error("No Splan to generate code from", {duration: 5000}); return; }
+    if (pysplan_handler.runs.length === 0) { toast.error("No runs in Splan to generate code from", {duration: 5000}); return; }
     const github_url = "https://raw.githubusercontent.com/PySplanner/PySplanner/refs/heads/main/pysplanner.py"
     const response = await fetch(github_url);
-    const code = await response.text();
-    // TODO: Add the stuff to the code
+    let code = await response.text();
+
+    pysplan_handler.hub_type = hub;
+    code = code.replace(`"{INSERT_PATH_PLANNER_DATA}"`, JSON.stringify(pysplan_handler));
+
+    const blob = new Blob([code], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `${pysplan_handler.name}.py`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
 
   const AddPoint = (e: React.MouseEvent) => {
@@ -389,7 +403,9 @@ export default function App() {
               <AccordionItem value="EV3">
                 <AccordionTrigger>EV3</AccordionTrigger>
                 <AccordionContent>
-                  EV3 is not yet supported.
+                  <div className="flex flex-col gap-2">
+                    <Button variant="secondary" className="w-full" onClick = { () => GenerateCode("EV3") }>Download Code</Button>
+                  </div>
                 </AccordionContent>
               </AccordionItem>
               <AccordionItem value="Splans">
