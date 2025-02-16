@@ -2,7 +2,7 @@
 import { Separator } from "@/components/ui/separator";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { useState, useEffect } from "react"
+import { useState, useRef, useEffect } from "react"
 import { useTheme } from "next-themes";
 import { Toaster, toast } from "sonner";
 import { connectToSpike, sendCodeToSpike, readResponseFromSpike } from "@/components/pybricks/tools";
@@ -19,7 +19,9 @@ from pybricks.parameters import Port
 motor = Motor(Port.A)
 motor.run_time(100, 2000)
 `
-const motorOptions = ["A", "B", "C", "D"]
+const motor_options = ["A", "B", "C", "D"]
+const game_board_width = 2362.2 // mm
+const game_board_height = 1143.0 // mm
 
 class DriveBase {
   left_motor: "A" | "B" | "C" | "D";
@@ -70,10 +72,10 @@ class Run {
   points: Point[];
   actions: Action[];
 
-  constructor(name: string, points: [number, number][], actions: { point: [number, number], function: string, args: any[] }[] = []) {
+  constructor(name: string, points: Point[], actions: Action[] = []) {
     this.name = name;
-    this.points = points.map((point) => new Point(point[0], point[1]));
-    this.actions = actions.map((action) => new Action(new Point(action.point[0], action.point[1]), action.function, action.args));
+    this.points = points;
+    this.actions = actions
   }
 }
 
@@ -85,49 +87,52 @@ class SplanContent {
   constructor(data: any) {
     this.name = data.name;
     this.drive_base = new DriveBase(data.drive_base.left_motor, data.drive_base.right_motor, data.drive_base.wheel_diameter, data.drive_base.axle_track);
-    this.runs = data.runs.map((run: any) => new Run(run.name, run.points, run.actions));
+    this.runs = data.runs.map((run: any) => new Run(run.name, run.points.map((point: any) => new Point(point[0], point[1])), run.actions.map((action: any) => new Action(new Point(action.point[0], action.point[1]), action.function, action.args))));
   }
 }
 
 // Custom PySplanner B-Spline algorithm
-const GetCurvePoints = (pts: number[], tension = 0.5, isClosed = false, numOfSegments = 16) => {
+const GetCurvePoints = (pts: number[], tension = 0.5, isClosed = false, segmentFactor = 0.035) => {
   let _pts = pts.slice(0); // Copy the array of points
   let res = [], x, y, t1x, t2x, t1y, t2y, c1, c2, c3, c4, st, t;
 
+  // Helper function to compute Euclidean distance
+  const getDistance = (x1: number, y1: number, x2: number, y2: number) => 
+    Math.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2);
+
   // Handle closed vs open curves by adding control points at the ends
   if (isClosed) {
-    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]); // Repeat last point at the start
-    _pts.push(pts[0], pts[1]); // Repeat first point at the end
+    _pts.unshift(pts[pts.length - 2], pts[pts.length - 1]);
+    _pts.push(pts[0], pts[1]);
   } else {
-    // Add mirrored control points at start and end to prevent sharp edges
-    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]); 
-    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]); 
+    _pts.unshift(2 * pts[0] - pts[2], 2 * pts[1] - pts[3]);
+    _pts.push(2 * pts[pts.length - 2] - pts[pts.length - 4], 2 * pts[pts.length - 1] - pts[pts.length - 3]);
   }
 
   // Loop through each segment of the points
   for (let i = 2; i < (_pts.length - 4); i += 2) {
-    for (t = 0; t <= numOfSegments; t++) { // Interpolate points for each segment
-      // Calculate tangents at the start and end of the segment
+    const segmentLength = getDistance(_pts[i], _pts[i + 1], _pts[i + 2], _pts[i + 3]);
+    const numOfSegments = Math.max(2, Math.floor(segmentLength * segmentFactor)); // At least 2 segments per section
+
+    for (t = 0; t <= numOfSegments; t++) {
       t1x = (_pts[i + 2] - _pts[i - 2]) * tension;
       t2x = (_pts[i + 4] - _pts[i]) * tension;
       t1y = (_pts[i + 3] - _pts[i - 1]) * tension;
       t2y = (_pts[i + 5] - _pts[i + 1]) * tension;
-      st = t / numOfSegments; // Parameter for interpolation between 0 and 1
-      
-      // Catmull-Rom spline basis functions
+      st = t / numOfSegments;
+
       c1 = 2 * st ** 3 - 3 * st ** 2 + 1;
       c2 = -2 * st ** 3 + 3 * st ** 2;
       c3 = st ** 3 - 2 * st ** 2 + st;
       c4 = st ** 3 - st ** 2;
 
-      // Calculate the x and y coordinates using the basis functions
       x = c1 * _pts[i] + c2 * _pts[i + 2] + c3 * t1x + c4 * t2x;
       y = c1 * _pts[i + 1] + c2 * _pts[i + 3] + c3 * t1y + c4 * t2y;
-      
-      res.push({ x, y }); // Store the interpolated point
+
+      res.push({ x, y });
     }
   }
-  return res; // Return the array of curve points
+  return res;
 };
 
 export default function App() {
@@ -137,6 +142,17 @@ export default function App() {
   const [spike_server, SetSpikeServer] = useState<BluetoothRemoteGATTServer | null>(null)
   const [pysplan_handler, SetPySplanHandler] = useState<SplanContent | null>(null)
   const [run_index, SetRunIndex] = useState(0)
+  const img_size_ref = useRef(null)
+  const [img_dimensions, SetImageDimensions] = useState({ width: 0, height: 0 });
+
+  useEffect(() => {
+    if (img_size_ref.current) {
+      // @ts-ignore | Fix getBoundingClient due to initial 'null' value
+      const { width, height } = img_size_ref.current.getBoundingClientRect();
+      SetImageDimensions({ width, height });
+      console.log(img_dimensions.width, img_dimensions.height);
+    }
+  }, [pysplan_handler]);
 
   const HandleLoadSplan = () => {
     const input = document.createElement('input');
@@ -180,7 +196,7 @@ export default function App() {
   const AddPoint = (e: React.MouseEvent) => {
     if (!pysplan_handler) { toast.error("No run selected", {duration: 5000}); return; }
     const rect = e.currentTarget.getBoundingClientRect();
-    const new_point = new Point(e.clientX - rect.left, e.clientY - rect.top);
+    const new_point = new Point(e.clientX - rect.left, rect.height - (e.clientY - rect.top));
     const new_points = [...pysplan_handler.runs[run_index].points, new_point];
 
     if (new_points.length === 25) {
@@ -190,8 +206,8 @@ export default function App() {
       return
     }
 
-    pysplan_handler.runs[run_index].points = new_points;
-    SetPySplanHandler(pysplan_handler);
+    const new_run = new Run(pysplan_handler.runs[run_index].name, new_points, pysplan_handler.runs[run_index].actions);
+    SetPySplanHandler({ ...pysplan_handler, runs: [...pysplan_handler.runs.slice(0, run_index), new_run, ...pysplan_handler.runs.slice(run_index + 1)] });
   };
 
   const flat_points = pysplan_handler?.runs[run_index].points.flatMap(p => [p.x, p.y])
@@ -282,14 +298,14 @@ export default function App() {
         {pysplan_handler ? (
           <div className="relative flex items-center justify-center w-full h-full border rounded-lg ml-4">
             <div className="relative">
-              <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain"/>
+              <img src={mat_img} className="w-auto h-auto max-h-[85vh] max-w-[85vw] object-contain" ref={img_size_ref}/>
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-full h-full relative" onClick={AddPoint}>
                   {pysplan_handler.runs[run_index].points.map((p, idx) => (
-                    <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
+                    <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
                   {spline_points.map((p, idx) => (
-                    <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, top: `${p.y}px` }}/>
+                    <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
                 </div>
               </div>
