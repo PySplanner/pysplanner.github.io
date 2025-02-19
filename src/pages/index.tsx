@@ -488,10 +488,10 @@ export default function App() {
               <div className="absolute inset-0 flex items-center justify-center">
                 <div className="w-full h-full relative" onClick={AddPoint}>
                   {pysplan_handler.runs[run_index].points.map((p, idx) => (
-                    <div key={idx} className="absolute bg-green-500 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
+                    <div key={idx} className="absolute bg-green-500 w-3 h-3 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
                   {spline_points.map((p, idx) => (
-                    <div key={idx} className="absolute bg-green-400 w-1 h-1 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
+                    <div key={idx} className="absolute bg-green-400 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
                 </div>
               </div>
