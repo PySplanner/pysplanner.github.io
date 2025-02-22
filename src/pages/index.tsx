@@ -68,12 +68,22 @@ class Point {
 class Run {
   name: string;
   points: Point[];
+  spline_points: Point[];
   actions: Action[];
 
-  constructor(name: string, points: Point[], actions: Action[] = []) {
+  constructor(name: string, points: Point[], spline_points: Point[] = [], actions: Action[] = []) {
     this.name = name;
     this.points = points;
+    this.spline_points = spline_points;
     this.actions = actions
+  }
+
+  toJSON() {
+    return {
+      name: this.name,
+      points: this.spline_points, // Replace placed points with spline points for navigation
+      actions: this.actions
+    }
   }
 }
 
@@ -167,11 +177,15 @@ export default function App() {
       return new Point((point.x / img_dimensions.width) * game_board_width, (point.y / img_dimensions.height) * game_board_height);
     });
 
+    const convertedSplinePoints = run.spline_points.map((point) => {
+      return new Point((point.x / img_dimensions.width) * game_board_width, (point.y / img_dimensions.height) * game_board_height);
+    });
+
     const convertedActions = run.actions.map((action) => {
       return new Action(new Point((action.point.x / img_dimensions.width) * game_board_width, (action.point.y / img_dimensions.height) * game_board_height), action.function, action.args);
     });
 
-    return new Run(run.name, convertedPoints, convertedActions);
+    return new Run(run.name, convertedPoints, convertedSplinePoints, convertedActions);
   }
 
   const HandleLoadSplan = () => {
@@ -378,12 +392,10 @@ export default function App() {
       return
     }
 
-    const new_run = new Run(pysplan_handler.runs[run_index].name, new_points, pysplan_handler.runs[run_index].actions);
+    const new_spline = GetCurvePoints(new_points.flatMap(p => [p.x, p.y])).map(p => new Point(p.x, p.y))
+    const new_run = new Run(pysplan_handler.runs[run_index].name, new_points, new_spline, pysplan_handler.runs[run_index].actions);
     SetPySplanHandler({ ...pysplan_handler, runs: [...pysplan_handler.runs.slice(0, run_index), new_run, ...pysplan_handler.runs.slice(run_index + 1)] });
   };
-
-  const flat_points = pysplan_handler?.runs[run_index]?.points.flatMap(p => [p.x, p.y])
-  const spline_points = GetCurvePoints(flat_points ?? []);
 
   const GetSpikeServer = async () => {
     toast.promise(
@@ -416,8 +428,9 @@ export default function App() {
                 <AccordionTrigger>Spike</AccordionTrigger>
                 <AccordionContent>
                   <div className="flex flex-col gap-2">
-                    <Button variant="secondary" className="w-full" onClick = { () => GetSpikeServer() }>Connect</Button>
-                    <Button variant={spike_server ? "secondary" : "outline"} className="w-full" onClick = { () => { spike_server && sendCodeToSpike(spike_server, sample_code) } }>Download Code</Button>
+                    { /* <Button variant="secondary" className="w-full" onClick = { () => GetSpikeServer() }>Connect</Button> */ }
+                    { /* <Button variant={spike_server ? "secondary" : "outline"} className="w-full" onClick = { () => { spike_server && sendCodeToSpike(spike_server, sample_code) } }>Download Code</Button> */ }
+                    <Button variant="secondary" className="w-full" onClick = { () => GenerateCode("Spike") }>Generate Code</Button>
                   </div>
                 </AccordionContent>
               </AccordionItem>
@@ -490,7 +503,7 @@ export default function App() {
                   {pysplan_handler.runs[run_index].points.map((p, idx) => (
                     <div key={idx} className="absolute bg-green-500 w-3 h-3 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
-                  {spline_points.map((p, idx) => (
+                  {pysplan_handler.runs[run_index].spline_points.map((p, idx) => (
                     <div key={idx} className="absolute bg-green-400 w-2 h-2 rounded-full" style={{ left: `${p.x}px`, bottom: `${p.y}px` }}/>
                   ))}
                 </div>
