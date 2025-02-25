@@ -413,7 +413,7 @@ export default function App() {
       <Card className="w-72 min-w-72 flex flex-col">
         <div className="pt-4 pb-2 flex flex-col">
           <div className="flex rounded-lg hover:bg-zinc-800 mb-3 py-1 w-[calc(100%-30px)] ml-[15px]" onClick={ () => SetSettingsActive(false) }>
-            <img src="./PySplanner.png" className="h-14 w-14 rounded-lg" />
+            <img src="./logo.png" className="h-14 w-14 rounded-lg" />
             <div className="flex flex-col pl-4">
               <h1 className="text-2xl font-bold">PySplanner</h1>
               <h2 className="text-sm font-small">Dashboard</h2>
