@@ -428,8 +428,6 @@ export default function App() {
                 <AccordionTrigger>Spike</AccordionTrigger>
                 <AccordionContent>
                   <div className="flex flex-col gap-2">
-                    { /* <Button variant="secondary" className="w-full" onClick = { () => GetSpikeServer() }>Connect</Button> */ }
-                    { /* <Button variant={spike_server ? "secondary" : "outline"} className="w-full" onClick = { () => { spike_server && sendCodeToSpike(spike_server, sample_code) } }>Download Code</Button> */ }
                     <Button variant="secondary" className="w-full" onClick = { () => GenerateCode("Spike") }>Generate Code</Button>
                   </div>
                 </AccordionContent>
